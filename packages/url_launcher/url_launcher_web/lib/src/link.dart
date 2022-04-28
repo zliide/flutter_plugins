@@ -56,6 +56,9 @@ class WebLinkDelegateState extends State<WebLinkDelegate> {
     if (widget.link.target != oldWidget.link.target) {
       _controller.setTarget(widget.link.target);
     }
+    if (widget.link.draggable != oldWidget.link.draggable) {
+      _controller.setDraggable(widget.link.draggable);
+    }
   }
 
   Future<void> _followLink() {
@@ -79,7 +82,8 @@ class WebLinkDelegateState extends State<WebLinkDelegate> {
               _controller = LinkViewController.fromParams(params, context);
               return _controller
                 ..setUri(widget.link.uri)
-                ..setTarget(widget.link.target);
+                ..setTarget(widget.link.target)
+                ..setDraggable(widget.link.draggable);
             },
             surfaceFactory:
                 (BuildContext context, PlatformViewController controller) {
@@ -165,6 +169,7 @@ class LinkViewController extends PlatformViewController {
   late html.Element _element;
 
   bool get _isInitialized => _element != null;
+  StreamSubscription? _dragSubscription;
 
   Future<void> _initialize() async {
     _element = html.Element.tag('a');
@@ -238,6 +243,33 @@ class LinkViewController extends PlatformViewController {
     _element.setAttribute('target', _getHtmlTarget(target));
   }
 
+  /// Set the draggable value for this link.
+  void setDraggable(bool draggable) {
+    assert(_isInitialized);
+    if (!draggable) {
+      _element.style
+        // Chrome
+        ..userDrag = 'none'
+        // Edge
+        ..setProperty('-webkit-user-drag', 'none');
+      // Firefox
+      _element.draggable = false;
+      _dragSubscription = _element.onDragStart.listen((event) {
+        event.preventDefault();
+      });
+    } else {
+      _element.style
+        // Chrome
+        ..removeProperty('user-drag')
+        // Edge
+        ..removeProperty('-webkit-user-drag');
+      // Firefox
+      _element.removeAttribute('draggable');
+      _dragSubscription?.cancel();
+      _dragSubscription = null;
+    }
+  }
+
   String _getHtmlTarget(LinkTarget target) {
     switch (target) {
       case LinkTarget.defaultTarget:
@@ -270,6 +302,7 @@ class LinkViewController extends PlatformViewController {
       if (_instances.isEmpty) {
         await _clickSubscription.cancel();
       }
+      _dragSubscription?.cancel();
       await SystemChannels.platform_views.invokeMethod<void>('dispose', viewId);
     }
   }
